@@ -29,7 +29,7 @@ type svc struct {
 }
 
 // New returns ResolverService instance
-func New(tag string, log logApi.Logger) resolverApi.ResolverService {
+func New(tag string, log logApi.Logger) resolverApi.Resolver {
 
 	s := &svc{
 		hosts: make(map[string]*ips),

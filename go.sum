@@ -1,4 +1,2 @@
-github.com/tdx/go v0.0.0-20190920083229-852946020edd h1:6f1A1/e2LN+ik0JJpf2tp9ikQ2X++qDzXEueXgcFySE=
-github.com/tdx/go v0.0.0-20190920083229-852946020edd/go.mod h1:+484gBjtsvwIg11Z1wZQINKCpZJHsZ3ndnjsipY7LvI=
-github.com/tdx/go v0.3.0 h1:8pUdVThifmGGl+mDxZHA1KOIgAcNdvWFoEzmZ1zETfw=
-github.com/tdx/go v0.3.0/go.mod h1:+484gBjtsvwIg11Z1wZQINKCpZJHsZ3ndnjsipY7LvI=
+github.com/tdx/go v0.3.1 h1:jmFP4GUbCLDp/u7/enrTci7LMrK/A1xEMR3yukka/BY=
+github.com/tdx/go v0.3.1/go.mod h1:+484gBjtsvwIg11Z1wZQINKCpZJHsZ3ndnjsipY7LvI=
