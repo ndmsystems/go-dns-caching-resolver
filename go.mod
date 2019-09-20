@@ -1,4 +1,4 @@
-module resolver
+module github.com/tdx/resolver
 
 go 1.13
 
