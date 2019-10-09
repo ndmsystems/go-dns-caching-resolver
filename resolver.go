@@ -109,6 +109,7 @@ func (s *svc) GetIPs(host string) ([]net.IP, []net.IP) {
 }
 
 func (s *svc) GetIPsStr(host string) ([]string, []string) {
+
 	s.mu.RLock()
 	hosts := s.hosts[host]
 	s.mu.RUnlock()
@@ -121,16 +122,20 @@ func (s *svc) GetIPsStr(host string) ([]string, []string) {
 }
 
 func (s *svc) Dump(w io.Writer) {
+	s.DumpPrefix(w, "")
+}
+
+func (s *svc) DumpPrefix(w io.Writer, prefix string) {
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	for host, r := range s.hosts {
 		for idx, ip := range r.ip4 {
-			fmt.Fprintf(w, "resolver.v4.%s.%d: %s\n", host, idx, ip)
+			fmt.Fprintf(w, "%sresolver.v4.%s.%d: %s\n", prefix, host, idx, ip)
 		}
 		for idx, ip := range r.ip6 {
-			fmt.Fprintf(w, "resolver.v6.%s.%d: %s\n", host, idx, ip)
+			fmt.Fprintf(w, "%sresolver.v6.%s.%d: %s\n", prefix, host, idx, ip)
 		}
 	}
 }
