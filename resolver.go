@@ -75,6 +75,14 @@ func (s *svc) DelHost(host string) {
 	s.mu.Unlock()
 }
 
+func (s *svc) Stop() {
+	s.mu.Lock()
+	for host := range s.hosts {
+		delete(s.hosts, host)
+	}
+	s.mu.Unlock()
+}
+
 func (s *svc) GetNextIP(host string) string {
 
 	s.mu.Lock()
