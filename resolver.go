@@ -193,7 +193,8 @@ func (s *svc) updateHostIPs(host string, sip []string) bool {
 		r.idx = 0
 	}
 
-	s.log.Debug().Println(s.tag, "host:", host, "ips4:", ipsv4, "ips6:", ipsv6)
+	s.log.Debug().Println(s.tag, "idx:", r.idx,
+		"host:", host, "ips4:", ipsv4, "ips6:", ipsv6)
 
 	return true
 }
