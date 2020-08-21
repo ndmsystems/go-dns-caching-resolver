@@ -153,11 +153,23 @@ func (s *svc) DumpPrefix(w io.Writer, prefix string) {
 
 	for _, hostName := range hosts {
 		host := s.hosts[hostName]
-		for idx, ip := range host.ip4 {
+
+		ip4 := make([]string, 0, len(host.ip4))
+		for _, ip := range host.ip4 {
+			ip4 = append(ip4, ip)
+		}
+		sort.Strings(ip4)
+		for idx, ip := range ip4 {
 			fmt.Fprintf(w,
 				"%sresolver.v4.%s.%d: %s\n", prefix, hostName, idx, ip)
 		}
-		for idx, ip := range host.ip6 {
+
+		ip6 := make([]string, 0, len(host.ip6))
+		for _, ip := range host.ip6 {
+			ip6 = append(ip6, ip)
+		}
+		sort.Strings(ip6)
+		for idx, ip := range ip6 {
 			fmt.Fprintf(w,
 				"%sresolver.v6.%s.%d: %s\n", prefix, hostName, idx, ip)
 		}
