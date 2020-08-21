@@ -85,6 +85,13 @@ func (s *svc) Stop() {
 
 func (s *svc) GetNextIP(host string) string {
 
+	ip, _ := s.GetNextIPWithIdx(host)
+
+	return ip
+}
+
+func (s *svc) GetNextIPWithIdx(host string) (string, int) {
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -92,15 +99,15 @@ func (s *svc) GetNextIP(host string) string {
 
 		itemsCount := len(r.ip4)
 		if itemsCount == 0 {
-			return ""
+			return "", -1
 		}
 
 		r.idx = (r.idx + 1) % itemsCount
 
-		return r.ip4[r.idx]
+		return r.ip4[r.idx], r.idx
 	}
 
-	return ""
+	return "", -1
 }
 
 func (s *svc) GetIPs(host string) ([]net.IP, []net.IP) {
@@ -138,12 +145,21 @@ func (s *svc) DumpPrefix(w io.Writer, prefix string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	for host, r := range s.hosts {
-		for idx, ip := range r.ip4 {
-			fmt.Fprintf(w, "%sresolver.v4.%s.%d: %s\n", prefix, host, idx, ip)
+	hosts := make([]string, 0, len(s.hosts))
+	for host := range s.hosts {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+
+	for _, hostName := range hosts {
+		host := s.hosts[hostName]
+		for idx, ip := range host.ip4 {
+			fmt.Fprintf(w,
+				"%sresolver.v4.%s.%d: %s\n", prefix, hostName, idx, ip)
 		}
-		for idx, ip := range r.ip6 {
-			fmt.Fprintf(w, "%sresolver.v6.%s.%d: %s\n", prefix, host, idx, ip)
+		for idx, ip := range host.ip6 {
+			fmt.Fprintf(w,
+				"%sresolver.v6.%s.%d: %s\n", prefix, hostName, idx, ip)
 		}
 	}
 }
