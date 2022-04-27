@@ -15,6 +15,7 @@ import (
 
 type ips struct {
 	idx  int
+	idx6 int
 	ip4  []string
 	ip6  []string
 	ipv4 []net.IP
@@ -40,6 +41,7 @@ func New(tag string, log logApi.Logger) resolverApi.Resolver {
 	return s
 }
 
+//
 func (s *svc) AddHost(host string) {
 
 	s.mu.Lock()
@@ -69,12 +71,14 @@ func (s *svc) AddHost(host string) {
 	}(s)
 }
 
+//
 func (s *svc) DelHost(host string) {
 	s.mu.Lock()
 	delete(s.hosts, host)
 	s.mu.Unlock()
 }
 
+//
 func (s *svc) Stop() {
 	s.mu.Lock()
 	for host := range s.hosts {
@@ -83,10 +87,9 @@ func (s *svc) Stop() {
 	s.mu.Unlock()
 }
 
+//
 func (s *svc) GetNextIP(host string) string {
-
 	ip, _ := s.GetNextIPWithIdx(host)
-
 	return ip
 }
 
@@ -105,6 +108,31 @@ func (s *svc) GetNextIPWithIdx(host string) (string, int) {
 		r.idx = (r.idx + 1) % itemsCount
 
 		return r.ip4[r.idx], r.idx
+	}
+
+	return "", -1
+}
+
+func (s *svc) GetNextIP6(host string) string {
+	ip, _ := s.GetNextIP6WithIdx(host)
+	return ip
+}
+
+func (s *svc) GetNextIP6WithIdx(host string) (string, int) {
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if r, ok := s.hosts[host]; ok {
+
+		itemsCount := len(r.ip6)
+		if itemsCount == 0 {
+			return "", -1
+		}
+
+		r.idx6 = (r.idx6 + 1) % itemsCount
+
+		return r.ip6[r.idx6], r.idx6
 	}
 
 	return "", -1
