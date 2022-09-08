@@ -1,4 +1,4 @@
-module github.com/tdx/resolver
+module github.com/ndmsystems/go-dns-caching-resolver
 
 go 1.13
 
