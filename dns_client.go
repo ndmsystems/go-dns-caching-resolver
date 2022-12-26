@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/miekg/dns"
 	logApi "github.com/woody-ltd/go/api/log"
@@ -92,10 +93,13 @@ func (d *dnsClient) lookupHost(ctx context.Context, host string) ([]net.IP, []ne
 
 // dnsLookupHost ...
 func (d *dnsClient) dnsLookupHost(ctx context.Context, nServer, host string) ([]net.IP, []net.IP, uint32, error) {
-	var ip4, ip6 []net.IP
-	g, _ := errgroup.WithContext(ctx)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
 
+	var ip4, ip6 []net.IP
 	var ttl4, ttl6 uint32 = math.MaxUint32, math.MaxUint32
+
+	g, _ := errgroup.WithContext(ctx)
 
 	// get IPv4 addresses
 	g.Go(func() error {

@@ -108,7 +108,7 @@ func (h *host) reloadIPs() uint32 {
 // isOld ...
 func (h *host) isOld() bool {
 	lastTime := atomic.LoadInt64(&h.lastTime)
-	return lastTime < time.Now().Unix()-time.Now().Add(-oldHostDuration).Unix()
+	return lastTime < time.Now().Add(-oldHostDuration).Unix()
 }
 
 // isExplicitlyAdded ...
