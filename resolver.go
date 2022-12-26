@@ -5,252 +5,243 @@ import (
 	"io"
 	"net"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
-	logApi "github.com/tdx/go/api/log"
-	resolverApi "github.com/tdx/go/api/resolver"
+	logApi "github.com/woody-ltd/go/api/log"
 )
 
-type ips struct {
-	idx  int
-	idx6 int
-	ip4  []string
-	ip6  []string
-	ipv4 []net.IP
-	ipv6 []net.IP
-}
+// Resolver ...
+type Resolver struct {
+	mu sync.RWMutex
 
-type svc struct {
-	mu    sync.RWMutex
-	hosts map[string]*ips
-	tag   string
-	log   logApi.Logger
+	// tag - the string to identify this instance of resolver among the others
+	tag string
+
+	// hosts - a map with maintained hosts
+	hosts map[string]*host
+
+	// dnsClient - a network client that can use a list of nameservers to lookup hosts and retrieve its ip addresses with ttl
+	dnsClient *dnsClient
+
+	// logger - a logger which used in this package
+	logger logApi.Logger
+
+	// stopCh ...
+	stopCh chan struct{}
 }
 
 // New returns ResolverService instance
-func New(tag string, log logApi.Logger) resolverApi.Resolver {
-
-	s := &svc{
-		hosts: make(map[string]*ips),
-		tag:   tag,
-		log:   log,
+func New(tag string, logger logApi.Logger) *Resolver {
+	r := &Resolver{
+		tag:       tag,
+		hosts:     make(map[string]*host),
+		dnsClient: newDnsClient(logger),
+		logger:    logger,
+		stopCh:    make(chan struct{}),
 	}
 
-	return s
+	go r.oldHostsDeleteLoop()
+
+	return r
 }
 
-//
-func (s *svc) AddHost(host string) {
+// WithNameservers - sets nameservers to resolve hosts
+func (r *Resolver) WithNameservers(nameServers ...string) *Resolver {
+	r.dnsClient.setNameServers(nameServers)
+	return r
+}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// AddHost adds a host to maintaining
+func (r *Resolver) AddHost(hostName string) {
+	r.mu.RLock()
+	_, ok := r.hosts[hostName]
+	r.mu.RUnlock()
 
-	if _, ok := s.hosts[host]; ok {
+	if ok {
 		return
 	}
 
-	s.hosts[host] = &ips{}
-
-	go func(p *svc) {
-		s.log.Info().Println(s.tag, "start resolver for:", host)
-		for {
-			ips, err := net.LookupHost(host)
-			if err == nil {
-				if !p.updateHostIPs(host, ips) {
-					s.log.Error().Println(s.tag, "stop resolver for:", host)
-					return
-				}
-			} else {
-				s.log.Error().Println(s.tag, "resolve", host, "failed:", err)
-			}
-
-			time.Sleep(time.Duration(60 * time.Second))
-		}
-	}(s)
-}
-
-//
-func (s *svc) DelHost(host string) {
-	s.mu.Lock()
-	delete(s.hosts, host)
-	s.mu.Unlock()
-}
-
-//
-func (s *svc) Stop() {
-	s.mu.Lock()
-	for host := range s.hosts {
-		delete(s.hosts, host)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.hosts[hostName]; !ok {
+		r.hosts[hostName] = newHost(r.tag, hostName, true, r.dnsClient, r.logger)
 	}
-	s.mu.Unlock()
 }
 
-//
-func (s *svc) GetNextIP(host string) string {
-	ip, _ := s.GetNextIPWithIdx(host)
+// DelHost deletes a host with name hostName from maintaining
+func (r *Resolver) DelHost(hostName string) {
+	r.delHosts([]string{hostName})
+}
+
+// Stop - stops maintaining for all hosts
+func (r *Resolver) Stop() {
+	close(r.stopCh)
+}
+
+// GetNextIP returns next IPv4 for host with name hostName
+func (r *Resolver) GetNextIP(hostName string) string {
+	ip, _ := r.GetNextIPWithIdx(hostName)
 	return ip
 }
 
-func (s *svc) GetNextIPWithIdx(host string) (string, int) {
+// GetNextIPWithIdx returns next IPv4 and index for host with name hostName
+func (r *Resolver) GetNextIPWithIdx(hostName string) (string, int) {
+	r.mu.RLock()
+	h, ok := r.hosts[hostName]
+	r.mu.RUnlock()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if r, ok := s.hosts[host]; ok {
-
-		itemsCount := len(r.ip4)
-		if itemsCount == 0 {
-			return "", -1
-		}
-
-		r.idx = (r.idx + 1) % itemsCount
-
-		return r.ip4[r.idx], r.idx
+	if ok {
+		ip, idx := h.getNextIP4WithIndex()
+		return ipStrIdx(ip, idx)
 	}
 
-	return "", -1
+	r.mu.Lock()
+	if h, ok = r.hosts[hostName]; !ok {
+		h = newHost(r.tag, hostName, false, r.dnsClient, r.logger)
+		r.hosts[hostName] = h
+	}
+	r.mu.Unlock()
+
+	ip, idx := h.getNextIP4WithIndex()
+	return ipStrIdx(ip, idx)
 }
 
-func (s *svc) GetNextIP6(host string) string {
-	ip, _ := s.GetNextIP6WithIdx(host)
+// GetNextIP6 returns next IPv6 for host with name hostName
+func (r *Resolver) GetNextIP6(hostName string) string {
+	ip, _ := r.GetNextIP6WithIdx(hostName)
 	return ip
 }
 
-func (s *svc) GetNextIP6WithIdx(host string) (string, int) {
+// GetNextIP6WithIdx returns next IPv6 and index for host with name hostName
+func (r *Resolver) GetNextIP6WithIdx(hostName string) (string, int) {
+	r.mu.RLock()
+	h, ok := r.hosts[hostName]
+	r.mu.RUnlock()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if r, ok := s.hosts[host]; ok {
-
-		itemsCount := len(r.ip6)
-		if itemsCount == 0 {
-			return "", -1
-		}
-
-		r.idx6 = (r.idx6 + 1) % itemsCount
-
-		return r.ip6[r.idx6], r.idx6
+	if ok {
+		ip, idx := h.getNextIP6WithIndex()
+		return ipStrIdx(ip, idx)
 	}
 
-	return "", -1
+	r.mu.Lock()
+	if h, ok = r.hosts[hostName]; !ok {
+		h = newHost(r.tag, hostName, false, r.dnsClient, r.logger)
+		r.hosts[hostName] = h
+	}
+	r.mu.Unlock()
+
+	ip, idx := h.getNextIP6WithIndex()
+	return ipStrIdx(ip, idx)
 }
 
-func (s *svc) GetIPs(host string) ([]net.IP, []net.IP) {
+// GetIPs returns a list of IPv4 and IPv6
+func (r *Resolver) GetIPs(hostName string) ([]net.IP, []net.IP) {
+	r.mu.RLock()
+	h := r.hosts[hostName]
+	r.mu.RUnlock()
 
-	s.mu.RLock()
-	hosts := s.hosts[host]
-	s.mu.RUnlock()
-
-	if hosts == nil {
+	if h == nil {
 		return nil, nil
 	}
 
-	return hosts.ipv4, hosts.ipv6
+	return h.getIPs()
 }
 
-func (s *svc) GetIPsStr(host string) ([]string, []string) {
-
-	s.mu.RLock()
-	hosts := s.hosts[host]
-	s.mu.RUnlock()
-
-	if hosts == nil {
-		return nil, nil
+// GetIPsStr returns a string list of IPv4 and IPv6
+func (r *Resolver) GetIPsStr(hostName string) ([]string, []string) {
+	ip4, ip6 := r.GetIPs(hostName)
+	var ip4Str, ip6Str []string
+	for _, ip := range ip4 {
+		ip4Str = append(ip4Str, ip.String())
 	}
-
-	return hosts.ip4, hosts.ip6
+	for _, ip := range ip6 {
+		ip6Str = append(ip6Str, ip.String())
+	}
+	return ip4Str, ip6Str
 }
 
-func (s *svc) Dump(w io.Writer) {
-	s.DumpPrefix(w, "")
+// Dump dumps into writer all hosts with theirs ips
+func (r *Resolver) Dump(w io.Writer) {
+	r.DumpPrefix(w, "")
 }
 
-func (s *svc) DumpPrefix(w io.Writer, prefix string) {
+// DumpPrefix dumps with prefix into writer all hosts with theirs ips
+func (r *Resolver) DumpPrefix(w io.Writer, prefix string) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	hosts := make([]string, 0, len(s.hosts))
-	for host := range s.hosts {
+	hosts := make([]string, 0, len(r.hosts))
+	for host := range r.hosts {
 		hosts = append(hosts, host)
 	}
 	sort.Strings(hosts)
 
 	for _, hostName := range hosts {
-		host := s.hosts[hostName]
-
-		ip4 := make([]string, 0, len(host.ip4))
-		for _, ip := range host.ip4 {
-			ip4 = append(ip4, ip)
-		}
+		ip4, ip6 := r.GetIPsStr(hostName)
 		sort.Strings(ip4)
-		for idx, ip := range ip4 {
-			fmt.Fprintf(w,
-				"%sresolver.v4.%s.%d: %s\n", prefix, hostName, idx, ip)
-		}
-
-		ip6 := make([]string, 0, len(host.ip6))
-		for _, ip := range host.ip6 {
-			ip6 = append(ip6, ip)
-		}
 		sort.Strings(ip6)
+
+		for idx, ip := range ip4 {
+			fmt.Fprintf(w, "%sresolver.v4.%s.%d: %s\n", prefix, hostName, idx, ip)
+		}
 		for idx, ip := range ip6 {
-			fmt.Fprintf(w,
-				"%sresolver.v6.%s.%d: %s\n", prefix, hostName, idx, ip)
+			fmt.Fprintf(w, "%sresolver.v6.%s.%d: %s\n", prefix, hostName, idx, ip)
 		}
 	}
 }
 
-//
-func (s *svc) updateHostIPs(host string, sip []string) bool {
+// oldHostsDeleteLoop runs a loop that deletes old hosts that were added non-explicitly
+func (r *Resolver) oldHostsDeleteLoop() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
 
-	s.mu.RLock()
-	r, ok := s.hosts[host]
-	s.mu.RUnlock()
+	for {
+		select {
+		case <-r.stopCh:
+			r.logger.Info().Println(r.tag, "Stop resolving hosts")
+			r.emptyHosts()
+			return
+		case <-ticker.C:
+			hostsToDel := make([]string, 0)
+			r.mu.RLock()
+			for hostName := range r.hosts {
+				if r.hosts[hostName].isOld() && !r.hosts[hostName].isExplicitlyAdded() {
+					hostsToDel = append(hostsToDel, hostName)
+				}
+			}
+			r.mu.RUnlock()
 
-	if !ok {
-		return false
-	}
-
-	var (
-		ipsv4 []string
-		ipsv6 []string
-		ipv4  []net.IP
-		ipv6  []net.IP
-	)
-
-	for _, ip := range sip {
-
-		ipp := net.ParseIP(ip)
-		if ipp == nil {
-			continue
-		}
-
-		if strings.Contains(ip, ":") {
-			ipv6 = append(ipv6, ipp)
-			ipsv6 = append(ipsv6, ip)
-		} else {
-			ipv4 = append(ipv4, ipp)
-			ipsv4 = append(ipsv4, ip)
+			if len(hostsToDel) > 0 {
+				r.delHosts(hostsToDel)
+				r.logger.Info().Println(r.tag, "Deleted old hosts:", hostsToDel)
+			}
 		}
 	}
-	sort.Strings(ipsv4)
-	sort.Strings(ipsv6)
+}
 
-	r.ip4 = ipsv4
-	r.ip6 = ipsv6
-	r.ipv4 = ipv4
-	r.ipv6 = ipv6
-
-	if r.idx > len(ipsv4)-1 {
-		r.idx = 0
+// delHosts deletes hosts from maintaining
+func (r *Resolver) delHosts(hosts []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, h := range hosts {
+		delete(r.hosts, h)
 	}
+}
 
-	s.log.Debug().Println(s.tag, "idx:", r.idx,
-		"host:", host, "ips4:", ipsv4, "ips6:", ipsv6)
+// emptyHosts deletes all hosts from maintaining
+func (r *Resolver) emptyHosts() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for hostName := range r.hosts {
+		r.hosts[hostName].stop()
+	}
+	r.hosts = make(map[string]*host)
+}
 
-	return true
+func ipStrIdx(ip net.IP, idx int) (string, int) {
+	if ip == nil {
+		return "", -1
+	}
+	return ip.String(), idx
 }
