@@ -150,6 +150,52 @@ func (d *dnsClient) dnsLookupHost(ctx context.Context, nServer, host string) ([]
 	return ip4, ip6, ttl, g.Wait()
 }
 
+// LookupSRV ...
+func (d *dnsClient) lookupSRV(service, proto, name string) (string, []*net.SRV, error) {
+	d.RLock()
+	nsCnt := len(d.nameServers)
+	d.RUnlock()
+
+	if nsCnt == 0 {
+		return net.LookupSRV(service, proto, name)
+	}
+
+	var (
+		cname string
+		srvs  []*net.SRV
+		err   error
+	)
+
+	for i := 0; i < nsCnt; i++ {
+		d.RLock()
+		nsIdx := int(atomic.LoadUint64(&d.nsCounter)) % len(d.nameServers)
+		nServer := d.nameServers[nsIdx]
+		d.RUnlock()
+
+		cname, srvs, err = d.dnsLookupSRV(nServer, service, proto, name)
+		if err == nil {
+			break
+		}
+		atomic.AddUint64(&d.nsCounter, 1)
+	}
+
+	return cname, srvs, err
+}
+
+func (d *dnsClient) dnsLookupSRV(nServer, service, proto, name string) (string, []*net.SRV, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	r := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 2 * time.Second}
+			return d.DialContext(ctx, network, nServer+":53")
+		},
+	}
+	return r.LookupSRV(ctx, service, proto, name)
+}
+
 // parseNameServers ...
 func parseNameServers(nameServers []string) []string {
 	ret := make([]string, 0, len(nameServers))

@@ -161,6 +161,11 @@ func (r *Resolver) GetIPsStr(hostName string) ([]string, []string) {
 	return ip4Str, ip6Str
 }
 
+// LookupSRV makes LookupSRV request to one of nameserver passed to WithNameservers
+func (r *Resolver) LookupSRV(service, proto, name string) (string, []*net.SRV, error) {
+	return r.dnsClient.lookupSRV(service, proto, name)
+}
+
 // Dump dumps into writer all hosts with theirs ips
 func (r *Resolver) Dump(w io.Writer) {
 	r.DumpPrefix(w, "")
