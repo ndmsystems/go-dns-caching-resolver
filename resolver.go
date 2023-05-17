@@ -263,6 +263,7 @@ func (r *Resolver) UpdateHostsFromMaping(mapping map[string]map[string][]string)
 			delete(r.hosts, k)
 		}
 		r.hosts[k] = newStaticHost(r.tag, k, true, v, r.logger)
+		r.mu.Unlock()
 	}
 
 }
