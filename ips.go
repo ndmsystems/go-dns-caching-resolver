@@ -20,6 +20,19 @@ func newIps() *ips {
 	}
 }
 
+func newIpsFromList(listIP []string) *ips {
+	result := make([]net.IP, 0, len(listIP))
+	for _, v := range listIP {
+		ip := net.ParseIP(v)
+		if ip != nil {
+			result = append(result, ip)
+		}
+	}
+	return &ips{
+		ipList: result,
+	}
+}
+
 // setIpList ...
 func (i *ips) setIpList(ipList []net.IP) {
 	i.mu.Lock()

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	logApi "github.com/woody-ltd/go/api/log"
+	logApi "github.com/ndmsystems/go/api/log"
 	"golang.org/x/sync/errgroup"
 )
 

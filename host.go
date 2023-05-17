@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	logApi "github.com/woody-ltd/go/api/log"
+	logApi "github.com/ndmsystems/go/api/log"
 )
 
 const (
@@ -31,6 +31,22 @@ type host struct {
 
 	ready  sync.WaitGroup
 	stopCh chan struct{}
+
+	static bool
+}
+
+func newStaticHost(tag string, hName string, eaFlag bool, mapings map[string][]string, logger logApi.Logger) *host {
+	h := &host{
+		tag:      tag,
+		hostName: hName,
+		eaFlag:   eaFlag,
+		ip4:      newIpsFromList(mapings["ip4"]),
+		ip6:      newIpsFromList(mapings["ip6"]),
+		lastTime: time.Now().Unix(),
+		static:   true,
+		logger:   logger,
+	}
+	return h
 }
 
 // newHost ...
@@ -114,6 +130,9 @@ func (h *host) isOld() bool {
 // isExplicitlyAdded ...
 func (h *host) isExplicitlyAdded() bool {
 	return h.eaFlag
+}
+func (h *host) isStatic() bool {
+	return h.static
 }
 
 // stop ...

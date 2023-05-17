@@ -8,7 +8,12 @@ import (
 	"sync"
 	"time"
 
-	logApi "github.com/woody-ltd/go/api/log"
+	logApi "github.com/ndmsystems/go/api/log"
+)
+
+const (
+	V4key = "ipv4"
+	V6key = "ipv6"
 )
 
 // Resolver ...
@@ -211,7 +216,7 @@ func (r *Resolver) oldHostsDeleteLoop() {
 			hostsToDel := make([]string, 0)
 			r.mu.RLock()
 			for hostName := range r.hosts {
-				if r.hosts[hostName].isOld() && !r.hosts[hostName].isExplicitlyAdded() {
+				if r.hosts[hostName].isOld() && !r.hosts[hostName].isExplicitlyAdded() && !r.hosts[hostName].static {
 					hostsToDel = append(hostsToDel, hostName)
 				}
 			}
@@ -249,4 +254,15 @@ func ipStrIdx(ip net.IP, idx int) (string, int) {
 		return "", -1
 	}
 	return ip.String(), idx
+}
+
+func (r *Resolver) UpdateMappingHost(mappings map[string]map[string][]string) {
+	for k, v := range mappings {
+		r.mu.Lock()
+		if _, ok := r.hosts[k]; ok {
+			delete(r.hosts, k)
+		}
+		r.hosts[k] = newStaticHost(r.tag, k, true, v, r.logger)
+	}
+
 }
