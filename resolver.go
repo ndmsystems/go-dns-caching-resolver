@@ -256,8 +256,8 @@ func ipStrIdx(ip net.IP, idx int) (string, int) {
 	return ip.String(), idx
 }
 
-func (r *Resolver) UpdateMappingHost(mappings map[string]map[string][]string) {
-	for k, v := range mappings {
+func (r *Resolver) UpdateHostsFromMaping(mapping map[string]map[string][]string) {
+	for k, v := range mapping {
 		r.mu.Lock()
 		if _, ok := r.hosts[k]; ok {
 			delete(r.hosts, k)
